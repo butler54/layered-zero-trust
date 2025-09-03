@@ -13,3 +13,7 @@ super-linter-output
 
 # GitHub Actions leftovers
 github_conf
+
+# Developer tools
+.DS_Store
+.envrc
