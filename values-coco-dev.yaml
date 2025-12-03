@@ -15,6 +15,16 @@ spire:
         route.openshift.io/termination: reencrypt
         route.openshift.io/destination-ca-certificate-secret: spire-bundle
 
+# Moved outside of clusterGroup to avoid validation errors
+# CoCo workload types for x509pop certificate generation
+# One SPIRE agent certificate is generated per workload type
+# All pods of the same workload type (e.g., all qtodo pods) share the same agent certificate
+# NOTE: KBS resource policy should be added to enforce workload-specific certificate access
+coco:
+  workloads:
+    - name: "qtodo"
+      namespace: "qtodo"
+
 clusterGroup:
   name: coco-dev
   isHubCluster: true
@@ -337,6 +347,14 @@ clusterGroup:
       timeout: 3600
     - name: init-data-gzipper
       playbook: ansible/init-data-gzipper.yaml
+      verbosity: -vvv
+      timeout: 3600
+    - name: generate-certs
+      playbook: ansible/generate-certs.yaml
+      verbosity: -vvv
+      timeout: 3600
+    - name: configure-spire-server-x509pop
+      playbook: ansible/configure-spire-server-x509pop.yaml
       verbosity: -vvv
       timeout: 3600
   managedClusterGroups: {}
