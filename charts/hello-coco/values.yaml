@@ -1,0 +1,12 @@
+# Default values for hello coco
+
+# SPIRE trust domain
+# The SPIRE agent must be configured with the same trust domain as the SPIRE Server
+# This ensures the agent can successfully authenticate and workloads receive valid SPIFFE IDs
+# Typically set to apps.<your cluster domain>
+trustDomain: "apps.example.com"
+
+# KBS URL where init container fetches SPIRE agent certificates after TEE attestation
+# Dev (single cluster): http://kbs-service.trustee-operator-system.svc.cluster.local:8080
+# Prod (separate trusted cluster): https://kbs.trusted-cluster.example.com
+kbsUrl: "http://kbs-service.trustee-operator-system.svc.cluster.local:8080"

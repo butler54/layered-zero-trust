@@ -1,0 +1,211 @@
+# Hello CoCo: SPIRE Agent with x509pop Attestation
+#
+# This pod demonstrates hardware attestation using Confidential Containers (CoCo)
+# and SPIRE x509pop node attestation. The security chain works as follows:
+#
+# 1. Pod starts in confidential VM (peer pod with AMD SNP or Intel TDX)
+# 2. Init container fetches SPIRE agent certificate from KBS
+# 3. KBS validates hardware TEE attestation evidence before releasing certificate
+# 4. Certificate and key are stored in /sealed volume (sealed secrets)
+# 5. SPIRE agent uses x509pop to register with SPIRE Server using fetched certificate
+# 6. SPIRE Server validates certificate was signed by trusted CA
+# 7. Agent issues workload SVIDs using unix attestation
+#
+# Sealed secrets: The agent cert/key fetched from KBS are "sealed" because they can
+# only be obtained after successful TEE attestation. They prove the pod is running
+# in genuine confidential hardware, establishing the root of trust.
+#
+# Root of trust: Hardware TEE (AMD SNP/Intel TDX), not Kubernetes cluster
+#
+apiVersion: v1
+kind: Pod
+metadata:
+  name: spire-agent-cc
+  namespace: zero-trust-workload-identity-manager
+  labels:
+    app: spire-agent-cc
+  annotations:
+    io.katacontainers.config.hypervisor.default_memory: "2048"
+    io.katacontainers.config.hypervisor.default_vcpus: "1"
+spec:
+  runtimeClassName: kata-remote
+  # shareProcessNamespace allows SPIRE agent to inspect workload processes for unix attestation
+  # This is secure because the real isolation boundary is the confidential VM (peer-pod with TEE),
+  # not individual containers. All containers in this pod are part of the same trust boundary.
+  shareProcessNamespace: true
+  serviceAccountName: spire-agent
+  nodeSelector:
+    workload-type: coco
+  imagePullSecrets:
+  - name: global-pull-secret
+
+  # Init container: Fetch SPIRE agent certificate from KBS after TEE attestation
+  initContainers:
+  - name: fetch-spire-cert
+    image: quay.io/confidential-containers/kbs-client:latest
+    command: ["/bin/sh", "-c"]
+    args:
+      - |
+        set -e
+        echo "=== Fetching SPIRE agent certificate from KBS ==="
+        echo "KBS URL: {{ .Values.kbsUrl }}"
+
+        # Fetch certificate (performs TEE attestation automatically)
+        /kbs-client --url {{ .Values.kbsUrl }} \
+          get-resource --path default/spire-cert-qtodo/cert.pem > /sealed/cert.pem
+
+        # Fetch private key
+        /kbs-client --url {{ .Values.kbsUrl }} \
+          get-resource --path default/spire-key-qtodo/key.pem > /sealed/key.pem
+
+        echo "=== SPIRE credentials fetched successfully ==="
+        ls -la /sealed/
+        echo "Certificate details:"
+        cat /sealed/cert.pem
+    volumeMounts:
+    - name: sealed-creds
+      mountPath: /sealed
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      readOnlyRootFilesystem: false
+      seccompProfile:
+        type: RuntimeDefault
+
+  containers:
+  # SPIRE Agent Sidecar
+  - name: spire-agent
+    image: registry.redhat.io/zero-trust-workload-identity-manager/spiffe-spire-agent-rhel9@sha256:4073ef462525c2ea1326f3c44ec630e33cbab4b428e8314a85d38756c2460831
+    command: ["/bin/sh", "-c"]
+    args:
+      - |
+        /spire-agent run -config /opt/spire/conf/agent/agent.conf
+    env:
+    - name: PATH
+      value: "/opt/spire/bin:/bin"
+    - name: MY_NODE_NAME
+      value: "coco-vm-node"  # Virtual node name for CoCo
+    ports:
+    - containerPort: 9982
+      name: healthz
+      protocol: TCP
+    livenessProbe:
+      httpGet:
+        path: /live
+        port: healthz
+        scheme: HTTP
+      initialDelaySeconds: 15
+      periodSeconds: 60
+    readinessProbe:
+      httpGet:
+        path: /ready
+        port: healthz
+        scheme: HTTP
+      initialDelaySeconds: 10
+      periodSeconds: 30
+    volumeMounts:
+    - name: spire-config
+      mountPath: /opt/spire/conf/agent
+      readOnly: true
+    - name: spire-bundle
+      mountPath: /run/spire/bundle
+      readOnly: true
+    - name: spire-socket
+      mountPath: /tmp/spire-agent/public
+    - name: spire-persistence
+      mountPath: /var/lib/spire
+    - name: sealed-creds
+      mountPath: /sealed
+      readOnly: true
+    securityContext:
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      seccompProfile:
+        type: RuntimeDefault
+
+  # SPIFFE Helper Sidecar
+  - name: spiffe-helper
+    image: ghcr.io/spiffe/spiffe-helper:0.10.1
+    imagePullPolicy: IfNotPresent
+    args:
+      - "-config"
+      - "/etc/helper.conf"
+    volumeMounts:
+      - name: spiffe-helper-config
+        readOnly: true
+        mountPath: /etc/helper.conf
+        subPath: helper.conf
+      - name: spire-socket
+        readOnly: true
+        mountPath: /tmp/spire-agent/public
+      - name: svids
+        mountPath: /svids
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      readOnlyRootFilesystem: false
+      seccompProfile:
+        type: RuntimeDefault
+
+  # Test Workload Container
+  - name: test-workload
+    image: registry.redhat.io/ubi9/ubi-minimal:latest
+    command: ["/bin/sh", "-c"]
+    args:
+      - |
+        echo "=== SPIRE Agent CoCo Test Started ==="
+        echo "Waiting for SPIFFE certificates..."
+
+        # Wait for SPIFFE certificates
+        while [ ! -f /svids/svid.pem ]; do
+          echo "Waiting for SPIFFE certificates..."
+          sleep 2
+        done
+
+        echo "SPIFFE certificates found!"
+        ls -la /svids/
+
+        echo "=== Testing SPIFFE X.509 certificates ==="
+        echo "Certificate details:"
+        openssl x509 -in /svids/svid.pem -text -noout | head -20
+
+        echo "=== Sleeping for manual inspection ==="
+        sleep 3600
+    volumeMounts:
+    - name: svids
+      mountPath: /svids
+      readOnly: true
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      readOnlyRootFilesystem: false
+      seccompProfile:
+        type: RuntimeDefault
+
+  volumes:
+  - name: spire-config
+    configMap:
+      name: spire-agent-coco
+  - name: spiffe-helper-config
+    configMap:
+      name: spiffe-helper-config
+  - name: spire-bundle
+    configMap:
+      name: spire-bundle
+  - name: spire-socket
+    emptyDir: {}
+  - name: spire-persistence
+    emptyDir: {}
+  - name: sealed-creds
+    emptyDir: {}
+  - name: svids
+    emptyDir: {}
