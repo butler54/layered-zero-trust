@@ -1,6 +1,8 @@
 ---
 global:
   pattern: layered-zero-trust
+  secretStore:
+    backend: none
   options:
     useCSV: false
     syncPolicy: Automatic
