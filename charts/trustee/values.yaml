@@ -1,0 +1,34 @@
+---
+# Secret store configuration (overridden by values-global.yaml)
+secretStore:
+  name: ""
+  kind: ""
+
+
+global:
+  secretStore:
+    # Secret store backend, typically overridden by values-global.yaml
+    backend: ""
+
+# KBS (Key Broker Service) configuration
+kbs:
+  # Security policy is an expected secret and is required to be pushed into the KBS
+  securityPolicy: secret/data/hub/securityPolicyConfig
+
+  # Public key for authentication by a user with the KBS management API
+  publicKey: secret/data/hub/kbsPublicKey
+
+  # Dynamic secret resources list - add new secrets here
+  # Each entry generates an ESO and gets added to kbsSecretResources
+  # requires a name of the secret and a key to retrieve using ESO, typically from vault.
+  secretResources: []
+    # Example:
+    # - name: "kbsres1"
+    #   key: "secret/data/hub/kbsres1"
+    # - name: "passphrase"
+    #   key: "secret/data/hub/passphrase"
+
+  # CA certificate for KBS TLS (PEM format)
+  # Required when using CA-signed server certificates.
+  # This chart publishes the CA to a ConfigMap for clients to verify KBS.
+  caCert: ""

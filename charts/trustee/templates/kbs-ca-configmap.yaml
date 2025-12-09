@@ -1,0 +1,11 @@
+{{- if .Values.kbs.caCert }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kbs-ca-cert
+  namespace: imperative
+data:
+  ca.crt: |
+{{ .Values.kbs.caCert | indent 4 }}
+{{- end }}
