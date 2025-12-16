@@ -302,15 +302,15 @@ clusterGroup:
       name: trustee
       namespace: trustee-operator-system
       project: hub
-      path: charts/trustee
+      chart: trustee
+      chartVersion: 0.0.*
       extraValueFiles:
         - '$patternref/overrides/values-trustee.yaml'
     sandbox:
       name: sandbox
       namespace: openshift-sandboxed-containers-operator
       project: hub
-      chart: sandboxed-containers
-      chartVersion: 0.0.*
+
     # CoCo peer-pods configuration via ACM Policy
     # Creates peer-pods-cm ConfigMap with platform-specific cluster configuration
     # Uses ACM Policy template functions (fromConfigMap) to auto-discover cluster settings

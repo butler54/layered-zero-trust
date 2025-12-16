@@ -17,3 +17,5 @@ github_conf
 # Editor and IDE specific files
 .cursorrules
 .vscode/
+# direnv
+.envrc
