@@ -2,7 +2,7 @@
 global:
   pattern: layered-zero-trust
   secretStore:
-    backend: none
+    backend: vault
   options:
     useCSV: false
     syncPolicy: Automatic
