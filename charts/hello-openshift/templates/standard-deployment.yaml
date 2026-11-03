@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: standard
+  labels:
+    app: standard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: standard
+  template:
+    metadata:
+      labels:
+        app: standard
+    spec:
+      containers:
+        - name: hello-openshift
+          image: {{ .Values.image }}
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: web-content
+              mountPath: /var/www/html
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+      volumes:
+        - name: web-content
+          configMap:
+            name: standard-web-content

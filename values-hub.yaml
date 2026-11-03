@@ -338,6 +338,10 @@ clusterGroup:
       overrides:
         - name: global.secretStore.backend
           value: none
+    hello-openshift:
+      name: hello-openshift
+      argoProject: hub
+      path: charts/hello-openshift
     acm-managed-clusters:
       name: acm-managed-clusters
       argoProject: hub
